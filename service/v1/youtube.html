@@ -16,23 +16,12 @@
       width: 100%;
       height: 100%;
       border: 0;
-    }
-
-    #status {
-      position: fixed;
-      left: 8px;
-      top: 8px;
-      z-index: 9999;
-      color: white;
-      background: rgba(0,0,0,.75);
-      font: 16px Arial, sans-serif;
-      padding: 6px 10px;
+      display: block;
     }
   </style>
 </head>
 <body>
   <div id="player"></div>
-  <div id="status">CinemaMod YouTube page loaded</div>
 
   <script>
     function normalizeId(id) {
@@ -53,8 +42,6 @@
     function play(id) {
       id = normalizeId(id);
 
-      document.getElementById("status").textContent = "Playing: " + id;
-
       document.getElementById("player").innerHTML =
         '<iframe ' +
         'src="https://www.youtube.com/embed/' + encodeURIComponent(id) +
@@ -67,9 +54,13 @@
       play(id);
     };
 
-    window.th_volume = function (volume) {};
+    window.th_volume = function (volume) {
+      // iframe fallback mode: volume control is intentionally ignored.
+    };
 
-    window.th_seek = function (seconds) {};
+    window.th_seek = function (seconds) {
+      // iframe fallback mode: seek is intentionally ignored.
+    };
 
     var params = new URLSearchParams(location.search);
     var testId = params.get("v");
