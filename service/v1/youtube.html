@@ -18,12 +18,28 @@
       border: 0;
       display: block;
     }
+
+    #status {
+      position: fixed;
+      left: 8px;
+      top: 8px;
+      z-index: 999999;
+      color: white;
+      background: red;
+      font: 18px Arial, sans-serif;
+      padding: 8px 12px;
+    }
   </style>
 </head>
 <body>
   <div id="player"></div>
+  <div id="status">page loaded</div>
 
   <script>
+    function setStatus(text) {
+      document.getElementById("status").textContent = text;
+    }
+
     function normalizeId(id) {
       id = String(id || "");
 
@@ -41,11 +57,12 @@
 
     function play(id) {
       id = normalizeId(id);
+      setStatus("th_video called: " + id);
 
       document.getElementById("player").innerHTML =
         '<iframe ' +
         'src="https://www.youtube.com/embed/' + encodeURIComponent(id) +
-        '?autoplay=1&mute=1&controls=0&playsinline=1&rel=0" ' +
+        '?autoplay=1&mute=1&controls=1&playsinline=1&rel=0" ' +
         'allow="autoplay; encrypted-media; fullscreen" ' +
         'allowfullscreen></iframe>';
     }
@@ -55,11 +72,11 @@
     };
 
     window.th_volume = function (volume) {
-      // iframe fallback mode: volume control is intentionally ignored.
+      setStatus("volume: " + volume);
     };
 
     window.th_seek = function (seconds) {
-      // iframe fallback mode: seek is intentionally ignored.
+      setStatus("seek: " + seconds);
     };
 
     var params = new URLSearchParams(location.search);
