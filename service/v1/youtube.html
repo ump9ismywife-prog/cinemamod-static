@@ -4,13 +4,19 @@
   <meta charset="utf-8">
   <title>CinemaMod YouTube</title>
   <style>
-    html, body, iframe {
+    html, body, #player {
       margin: 0;
       width: 100%;
       height: 100%;
-      border: 0;
-      background: black;
+      background: #000;
       overflow: hidden;
+    }
+
+    iframe {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
     }
   </style>
 </head>
@@ -18,18 +24,73 @@
   <div id="player"></div>
 
   <script>
-    function th_video(id, autoplay) {
-      document.getElementById("player").innerHTML =
-        `<iframe
-          src="https://www.youtube.com/embed/${id}?autoplay=${autoplay ? 1 : 0}&enablejsapi=1"
-          allow="autoplay; encrypted-media; fullscreen"
-          allowfullscreen>
-        </iframe>`;
+    let player = null;
+    let apiReady = false;
+    let pendingVideo = null;
+
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+
+    function onYouTubeIframeAPIReady() {
+      apiReady = true;
+
+      player = new YT.Player("player", {
+        width: "100%",
+        height: "100%",
+        videoId: "",
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
+          enablejsapi: 1
+        },
+        events: {
+          onReady: function () {
+            if (pendingVideo) {
+              th_video(pendingVideo.id, pendingVideo.autoplay);
+              pendingVideo = null;
+            }
+          }
+        }
+      });
     }
 
-    function th_volume(volume) {}
+    function th_video(id, autoplay) {
+      if (!apiReady || !player || !player.loadVideoById) {
+        pendingVideo = { id: id, autoplay: autoplay };
+        return;
+      }
 
-    function th_seek(seconds) {}
+      if (autoplay) {
+        player.loadVideoById(id);
+        player.playVideo();
+      } else {
+        player.cueVideoById(id);
+      }
+    }
+
+    function th_volume(volume) {
+      if (!player || !player.setVolume) return;
+
+      const v = Math.max(0, Math.min(100, Number(volume)));
+      player.setVolume(v);
+
+      if (v <= 0) {
+        player.mute();
+      } else {
+        player.unMute();
+      }
+    }
+
+    function th_seek(seconds) {
+      if (!player || !player.seekTo) return;
+      player.seekTo(Number(seconds), true);
+    }
   </script>
 </body>
 </html>
