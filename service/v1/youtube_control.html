@@ -2,9 +2,9 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>CinemaMod YouTube Control</title>
+  <title>CinemaMod YouTube Byakko Style</title>
   <style>
-    html, body, #player {
+    html, body {
       margin: 0;
       width: 100%;
       height: 100%;
@@ -12,11 +12,11 @@
       overflow: hidden;
     }
 
-    iframe {
-      width: 100%;
+    #player {
+      position: absolute;
+      left: -50%;
+      width: 200%;
       height: 100%;
-      border: 0;
-      display: block;
     }
 
     #status {
@@ -35,16 +35,14 @@
 <body>
   <div id="player"></div>
   <div id="status">loading</div>
-
+  <script src="https://www.youtube.com/iframe_api"></script>
   <script>
     var player = null;
     var playerReady = false;
-    var pendingVideo = null;
-    var currentVideoId = null;
-    var loadedOnce = false;
-    var lastVolume = 100;
-    var hasStarted = false;
-    var pendingSeek = null;
+    var queuedVideo = null;
+    var queuedVolume = 100;
+    var startTime = 0;
+    var seekToEnd = false;
 
     function debug(text) {
       var params = new URLSearchParams(location.search);
@@ -53,6 +51,14 @@
         status.style.display = "block";
         status.textContent = text;
       }
+    }
+
+    function timestamp() {
+      return Date.now() * 0.001;
+    }
+
+    function targetTime() {
+      return Math.max(0, (timestamp() - startTime) - 0.5);
     }
 
     function normalizeId(id) {
@@ -70,107 +76,73 @@
       return id;
     }
 
-    function applyVolume() {
-      if (!player || !player.setVolume) return;
+    function tick() {
+      if (!playerReady || !player) return;
 
-      player.setVolume(lastVolume);
-      if (lastVolume <= 0) {
-        player.mute();
-      } else if (hasStarted) {
-        player.unMute();
-      }
-    }
-
-    function startPlayback(id) {
-      id = normalizeId(id);
-
-      if (!playerReady || !player || !player.loadVideoById) {
-        pendingVideo = id;
-        debug("pending: " + id);
-        return;
+      if (queuedVideo !== null) {
+        debug("load: " + queuedVideo);
+        player.loadVideoById(queuedVideo);
+        queuedVideo = null;
       }
 
-      if (currentVideoId === id && loadedOnce) {
-        debug("skip duplicate: " + id);
-        return;
+      if (queuedVolume !== null) {
+        player.setVolume(queuedVolume);
       }
 
-      currentVideoId = id;
-      loadedOnce = true;
-      hasStarted = false;
+      if (seekToEnd && player.getDuration && player.getDuration() > 0) {
+        startTime = timestamp() - player.getDuration();
+        seekToEnd = false;
+      }
 
-      player.mute();
-      debug("load: " + id);
+      if (player.getDuration && player.getCurrentTime && player.seekTo) {
+        var target = targetTime();
+        var duration = player.getDuration();
 
-      player.loadVideoById({
-        videoId: id,
-        startSeconds: 0
-      });
-
-      setTimeout(function () {
-        try {
-          player.playVideo();
-          debug("play requested: " + id);
-        } catch (e) {
-          debug("play error: " + e.message);
+        if (duration > 0 && target < duration - 1.0) {
+          if (Math.abs(player.getCurrentTime() - target) > 2.0) {
+            player.seekTo(target, true);
+          }
         }
-      }, 300);
+      }
+
+      if (player.getPlayerState && player.playVideo && player.getPlayerState() !== 1) {
+        player.playVideo();
+      }
     }
 
-    window.onYouTubeIframeAPIReady = function () {
+    setInterval(tick, 100);
+
+    window.th_video = function (id, live) {
+      id = normalizeId(id);
+      startTime = timestamp();
+      seekToEnd = !!live;
+
+      if (player !== null) {
+        queuedVideo = id;
+        return;
+      }
+
+      debug("create: " + id);
       player = new YT.Player("player", {
         width: "100%",
         height: "100%",
-        videoId: "",
+        videoId: id,
+        host: "https://www.youtube-nocookie.com",
         playerVars: {
           autoplay: 1,
-          mute: 1,
           controls: 0,
           disablekb: 1,
           fs: 0,
           modestbranding: 1,
           playsinline: 1,
           rel: 0,
-          enablejsapi: 1,
-          origin: location.origin
+          iv_load_policy: 3
         },
         events: {
           onReady: function () {
             playerReady = true;
-            player.mute();
-            debug("ready");
-
-            var params = new URLSearchParams(location.search);
-            var testId = params.get("v");
-
-            if (pendingVideo) {
-              startPlayback(pendingVideo);
-              pendingVideo = null;
-            } else if (testId) {
-              startPlayback(testId);
-            }
+            debug("ready: " + id);
           },
-
-          onStateChange: function (event) {
-            debug("state: " + event.data);
-
-            if (event.data === YT.PlayerState.PLAYING) {
-              hasStarted = true;
-
-              setTimeout(function () {
-                applyVolume();
-              }, 1000);
-
-              if (pendingSeek !== null && pendingSeek > 2) {
-                var seekValue = pendingSeek;
-                pendingSeek = null;
-                setTimeout(function () {
-                  if (player && player.seekTo) player.seekTo(seekValue, true);
-                }, 1200);
-              }
-            }
-          },
-
           onError: function (event) {
             debug("youtube error: " + event.data);
           }
@@ -178,35 +150,21 @@
       });
     };
 
-    window.th_video = function (id, isLivestream) {
-      startPlayback(id);
-    };
-
     window.th_volume = function (volume) {
-      lastVolume = Math.max(0, Math.min(100, Number(volume)));
-      debug("volume: " + lastVolume);
-      applyVolume();
+      queuedVolume = Math.max(0, Math.min(100, Number(volume)));
+      debug("volume: " + queuedVolume);
     };
 
     window.th_seek = function (seconds) {
-      seconds = Number(seconds);
+      startTime = timestamp() - Number(seconds);
       debug("seek: " + seconds);
-
-      if (!player || !player.seekTo || !hasStarted) {
-        pendingSeek = seconds;
-        return;
-      }
-
-      if (seconds <= 2) return;
-      player.seekTo(seconds, true);
     };
 
-    var tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    tag.onerror = function () {
-      debug("api failed");
-    };
-    document.head.appendChild(tag);
+    var params = new URLSearchParams(location.search);
+    var testId = params.get("v");
+    if (testId) {
+      window.th_video(testId, false);
+    }
   </script>
 </body>
 </html>
