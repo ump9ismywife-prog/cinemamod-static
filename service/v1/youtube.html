@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CinemaMod YouTube</title>
+  <style>
+    html, body, iframe {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: black;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+
+  <script>
+    function th_video(id, autoplay) {
+      document.getElementById("player").innerHTML =
+        `<iframe
+          src="https://www.youtube.com/embed/${id}?autoplay=${autoplay ? 1 : 0}&enablejsapi=1"
+          allow="autoplay; encrypted-media; fullscreen"
+          allowfullscreen>
+        </iframe>`;
+    }
+
+    function th_volume(volume) {}
+
+    function th_seek(seconds) {}
+  </script>
+</body>
+</html>
