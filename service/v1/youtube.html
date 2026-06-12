@@ -11,29 +11,105 @@
       background: #000;
       overflow: hidden;
     }
-
     iframe {
       display: block;
       width: 100%;
       height: 100%;
       border: 0;
     }
+    #status {
+      position: fixed;
+      left: 8px;
+      top: 8px;
+      z-index: 9999;
+      color: #fff;
+      font: 14px Arial, sans-serif;
+      background: rgba(0,0,0,.7);
+      padding: 6px 8px;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <div id="player"></div>
+  <div id="status">loading</div>
 
   <script>
-    let player = null;
-    let ready = false;
-    let pending = null;
-    let lastVolume = 100;
+    var player = null;
+    var ready = false;
+    var pending = null;
+    var lastVolume = 100;
 
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(tag);
+    function debug(message) {
+      var params = new URLSearchParams(location.search);
+      var el = document.getElementById("status");
+      if (params.get("debug") === "1") {
+        el.style.display = "block";
+        el.textContent = message;
+      }
+    }
 
-    function onYouTubeIframeAPIReady() {
+    function normalizeId(id) {
+      id = String(id || "");
+      var watch = id.match(/[?&]v=([^&]+)/);
+      if (watch) return watch[1];
+      var short = id.match(/youtu\.be\/([^?&]+)/);
+      if (short) return short[1];
+      var embed = id.match(/embed\/([^?&]+)/);
+      if (embed) return embed[1];
+      return id;
+    }
+
+    function fallbackIframe(id) {
+      id = normalizeId(id);
+      debug("fallback iframe: " + id);
+
+      document.getElementById("player").innerHTML =
+        '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(id) +
+        '?autoplay=1&mute=1&controls=0&playsinline=1&rel=0&enablejsapi=1" ' +
+        'allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
+    }
+
+    window.th_video = function (id, isLivestream) {
+      id = normalizeId(id);
+      debug("th_video: " + id);
+
+      if (!ready || !player || !player.loadVideoById) {
+        pending = { id: id, isLivestream: isLivestream };
+        setTimeout(function () {
+          if (!ready) fallbackIframe(id);
+        }, 2500);
+        return;
+      }
+
+      player.mute();
+      player.loadVideoById({ videoId: id, startSeconds: 0 });
+
+      setTimeout(function () {
+        try {
+          player.playVideo();
+          debug("playVideo called");
+        } catch (e) {
+          fallbackIframe(id);
+        }
+      }, 100);
+    };
+
+    window.th_volume = function (volume) {
+      lastVolume = Math.max(0, Math.min(100, Number(volume)));
+      if (!player || !player.setVolume) return;
+      player.setVolume(lastVolume);
+      if (lastVolume <= 0) player.mute();
+    };
+
+    window.th_seek = function (seconds) {
+      if (!player || !player.seekTo) return;
+      player.seekTo(Number(seconds), true);
+    };
+
+    window.onYouTubeIframeAPIReady = function () {
+      debug("api ready");
+
       player = new YT.Player("player", {
         width: "100%",
         height: "100%",
@@ -52,56 +128,52 @@
         events: {
           onReady: function () {
             ready = true;
+            debug("player ready");
             player.mute();
 
-            if (pending) {
-              th_video(pending.id, pending.isLivestream);
-              pending = null;
-            }
+            var params = new URLSearchParams(location.search);
+            var testId = params.get("v");
 
-            const params = new URLSearchParams(location.search);
-            const testId = params.get("v");
-            if (testId) {
-              th_video(testId, false);
+            if (pending) {
+              window.th_video(pending.id, pending.isLivestream);
+              pending = null;
+            } else if (testId) {
+              window.th_video(testId, false);
             }
           },
-
           onStateChange: function (event) {
+            debug("state: " + event.data);
             if (event.data === YT.PlayerState.PLAYING && lastVolume > 0) {
               setTimeout(function () {
                 player.setVolume(lastVolume);
                 player.unMute();
-              }, 800);
+              }, 1000);
             }
+          },
+          onError: function (event) {
+            debug("youtube error: " + event.data);
           }
         }
       });
+    };
+
+    var params = new URLSearchParams(location.search);
+    var immediateTestId = params.get("v");
+    if (immediateTestId) {
+      debug("waiting api: " + immediateTestId);
+      setTimeout(function () {
+        if (!ready) fallbackIframe(immediateTestId);
+      }, 3000);
     }
 
-    function normalizeId(id) {
-      id = String(id || "");
-
-      const watch = id.match(/[?&]v=([^&]+)/);
-      if (watch) return watch[1];
-
-      const short = id.match(/youtu\.be\/([^?&]+)/);
-      if (short) return short[1];
-
-      const embed = id.match(/embed\/([^?&]+)/);
-      if (embed) return embed[1];
-
-      return id;
-    }
-
-    function th_video(id, isLivestream) {
-      id = normalizeId(id);
-
-      if (!ready || !player || !player.loadVideoById) {
-        pending = { id: id, isLivestream: isLivestream };
-        return;
-      }
-
-      player.mute();
-
-      player.loadVideoById({
-        video
+    var tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    tag.onerror = function () {
+      debug("api script failed");
+      var id = new URLSearchParams(location.search).get("v");
+      if (id) fallbackIframe(id);
+    };
+    document.head.appendChild(tag);
+  </script>
+</body>
+</html>
