@@ -65,12 +65,14 @@
               th_video(testId, true);
             }
           },
-          onStateChange: function (event) {
-            if (event.data === YT.PlayerState.PLAYING && lastVolume > 0) {
-              player.setVolume(lastVolume);
-            }
-          }
-        }
+         onStateChange: function (event) {
+  if (event.data === YT.PlayerState.PLAYING && lastVolume > 0) {
+    setTimeout(function () {
+      player.setVolume(lastVolume);
+      player.unMute();
+    }, 800);
+  }
+}
       });
     }
 
@@ -89,25 +91,25 @@
       return id;
     }
 
-    function th_video(id, autoplay) {
-      id = normalizeId(id);
+    function th_video(id, isLivestream) {
+  id = normalizeId(id);
 
-      if (!ready || !player || !player.loadVideoById) {
-        pending = { id: id, autoplay: autoplay };
-        return;
-      }
+  if (!ready || !player || !player.loadVideoById) {
+    pending = { id: id, autoplay: true };
+    return;
+  }
 
-      player.mute();
+  player.mute();
 
-      if (autoplay) {
-        player.loadVideoById({
-          videoId: id,
-          startSeconds: 0
-        });
-        player.playVideo();
-      } else {
-        player.cueVideoById(id);
-      }
+  player.loadVideoById({
+    videoId: id,
+    startSeconds: 0
+  });
+
+  setTimeout(function () {
+    player.playVideo();
+  }, 100);
+}
     }
 
     function th_volume(volume) {
