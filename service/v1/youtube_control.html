@@ -43,6 +43,9 @@
     var queuedVolume = 100;
     var startTime = 0;
     var seekToEnd = false;
+    var apiReady = false;
+    var pendingInitialVideo = null;
+    var pendingInitialLive = false;
 
     function debug(text) {
       var params = new URLSearchParams(location.search);
@@ -112,16 +115,17 @@
 
     setInterval(tick, 100);
 
-    window.th_video = function (id, live) {
-      id = normalizeId(id);
-      startTime = timestamp();
-      seekToEnd = !!live;
+    window.onYouTubeIframeAPIReady = function () {
+      apiReady = true;
+      debug("api ready");
 
-      if (player !== null) {
-        queuedVideo = id;
-        return;
+      if (pendingInitialVideo !== null && player === null) {
+        createPlayer(pendingInitialVideo, pendingInitialLive);
+        pendingInitialVideo = null;
       }
+    };
 
+    function createPlayer(id, live) {
       debug("create: " + id);
       player = new YT.Player("player", {
         width: "100%",
@@ -148,6 +152,26 @@
           }
         }
       });
+    }
+
+    window.th_video = function (id, live) {
+      id = normalizeId(id);
+      startTime = timestamp();
+      seekToEnd = !!live;
+
+      if (player !== null) {
+        queuedVideo = id;
+        return;
+      }
+
+      if (!apiReady || !window.YT || !YT.Player) {
+        pendingInitialVideo = id;
+        pendingInitialLive = !!live;
+        debug("waiting api: " + id);
+        return;
+      }
+
+      createPlayer(id, live);
     };
 
     window.th_volume = function (volume) {
