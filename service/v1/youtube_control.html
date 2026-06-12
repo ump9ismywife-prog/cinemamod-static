@@ -1,0 +1,212 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CinemaMod YouTube Control</title>
+  <style>
+    html, body, #player {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+
+    #status {
+      position: fixed;
+      left: 8px;
+      top: 8px;
+      z-index: 999999;
+      color: #fff;
+      background: rgba(0, 0, 0, .75);
+      font: 16px Arial, sans-serif;
+      padding: 6px 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+  <div id="status">loading</div>
+
+  <script>
+    var player = null;
+    var playerReady = false;
+    var pendingVideo = null;
+    var currentVideoId = null;
+    var loadedOnce = false;
+    var lastVolume = 100;
+    var hasStarted = false;
+    var pendingSeek = null;
+
+    function debug(text) {
+      var params = new URLSearchParams(location.search);
+      if (params.get("debug") === "1") {
+        var status = document.getElementById("status");
+        status.style.display = "block";
+        status.textContent = text;
+      }
+    }
+
+    function normalizeId(id) {
+      id = String(id || "");
+
+      var watch = id.match(/[?&]v=([^&]+)/);
+      if (watch) return watch[1];
+
+      var short = id.match(/youtu\.be\/([^?&]+)/);
+      if (short) return short[1];
+
+      var embed = id.match(/embed\/([^?&]+)/);
+      if (embed) return embed[1];
+
+      return id;
+    }
+
+    function applyVolume() {
+      if (!player || !player.setVolume) return;
+
+      player.setVolume(lastVolume);
+      if (lastVolume <= 0) {
+        player.mute();
+      } else if (hasStarted) {
+        player.unMute();
+      }
+    }
+
+    function startPlayback(id) {
+      id = normalizeId(id);
+
+      if (!playerReady || !player || !player.loadVideoById) {
+        pendingVideo = id;
+        debug("pending: " + id);
+        return;
+      }
+
+      if (currentVideoId === id && loadedOnce) {
+        debug("skip duplicate: " + id);
+        return;
+      }
+
+      currentVideoId = id;
+      loadedOnce = true;
+      hasStarted = false;
+
+      player.mute();
+      debug("load: " + id);
+
+      player.loadVideoById({
+        videoId: id,
+        startSeconds: 0
+      });
+
+      setTimeout(function () {
+        try {
+          player.playVideo();
+          debug("play requested: " + id);
+        } catch (e) {
+          debug("play error: " + e.message);
+        }
+      }, 300);
+    }
+
+    window.onYouTubeIframeAPIReady = function () {
+      player = new YT.Player("player", {
+        width: "100%",
+        height: "100%",
+        videoId: "",
+        playerVars: {
+          autoplay: 1,
+          mute: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
+          enablejsapi: 1,
+          origin: location.origin
+        },
+        events: {
+          onReady: function () {
+            playerReady = true;
+            player.mute();
+            debug("ready");
+
+            var params = new URLSearchParams(location.search);
+            var testId = params.get("v");
+
+            if (pendingVideo) {
+              startPlayback(pendingVideo);
+              pendingVideo = null;
+            } else if (testId) {
+              startPlayback(testId);
+            }
+          },
+
+          onStateChange: function (event) {
+            debug("state: " + event.data);
+
+            if (event.data === YT.PlayerState.PLAYING) {
+              hasStarted = true;
+
+              setTimeout(function () {
+                applyVolume();
+              }, 1000);
+
+              if (pendingSeek !== null && pendingSeek > 2) {
+                var seekValue = pendingSeek;
+                pendingSeek = null;
+                setTimeout(function () {
+                  if (player && player.seekTo) player.seekTo(seekValue, true);
+                }, 1200);
+              }
+            }
+          },
+
+          onError: function (event) {
+            debug("youtube error: " + event.data);
+          }
+        }
+      });
+    };
+
+    window.th_video = function (id, isLivestream) {
+      startPlayback(id);
+    };
+
+    window.th_volume = function (volume) {
+      lastVolume = Math.max(0, Math.min(100, Number(volume)));
+      debug("volume: " + lastVolume);
+      applyVolume();
+    };
+
+    window.th_seek = function (seconds) {
+      seconds = Number(seconds);
+      debug("seek: " + seconds);
+
+      if (!player || !player.seekTo || !hasStarted) {
+        pendingSeek = seconds;
+        return;
+      }
+
+      if (seconds <= 2) return;
+      player.seekTo(seconds, true);
+    };
+
+    var tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    tag.onerror = function () {
+      debug("api failed");
+    };
+    document.head.appendChild(tag);
+  </script>
+</body>
+</html>
