@@ -1,0 +1,170 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CinemaMod YouTube Byakko Style</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+
+    #player {
+      position: absolute;
+      left: -50%;
+      width: 200%;
+      height: 100%;
+    }
+
+    #status {
+      position: fixed;
+      left: 8px;
+      top: 8px;
+      z-index: 999999;
+      color: #fff;
+      background: rgba(0, 0, 0, .75);
+      font: 16px Arial, sans-serif;
+      padding: 6px 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+  <div id="status">loading</div>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    var player = null;
+    var playerReady = false;
+    var queuedVideo = null;
+    var queuedVolume = 100;
+    var startTime = 0;
+    var seekToEnd = false;
+
+    function debug(text) {
+      var params = new URLSearchParams(location.search);
+      if (params.get("debug") === "1") {
+        var status = document.getElementById("status");
+        status.style.display = "block";
+        status.textContent = text;
+      }
+    }
+
+    function timestamp() {
+      return Date.now() * 0.001;
+    }
+
+    function targetTime() {
+      return Math.max(0, (timestamp() - startTime) - 0.5);
+    }
+
+    function normalizeId(id) {
+      id = String(id || "");
+
+      var watch = id.match(/[?&]v=([^&]+)/);
+      if (watch) return watch[1];
+
+      var short = id.match(/youtu\.be\/([^?&]+)/);
+      if (short) return short[1];
+
+      var embed = id.match(/embed\/([^?&]+)/);
+      if (embed) return embed[1];
+
+      return id;
+    }
+
+    function tick() {
+      if (!playerReady || !player) return;
+
+      if (queuedVideo !== null) {
+        debug("load: " + queuedVideo);
+        player.loadVideoById(queuedVideo);
+        queuedVideo = null;
+      }
+
+      if (queuedVolume !== null) {
+        player.setVolume(queuedVolume);
+      }
+
+      if (seekToEnd && player.getDuration && player.getDuration() > 0) {
+        startTime = timestamp() - player.getDuration();
+        seekToEnd = false;
+      }
+
+      if (player.getDuration && player.getCurrentTime && player.seekTo) {
+        var target = targetTime();
+        var duration = player.getDuration();
+
+        if (duration > 0 && target < duration - 1.0) {
+          if (Math.abs(player.getCurrentTime() - target) > 2.0) {
+            player.seekTo(target, true);
+          }
+        }
+      }
+
+      if (player.getPlayerState && player.playVideo && player.getPlayerState() !== 1) {
+        player.playVideo();
+      }
+    }
+
+    setInterval(tick, 100);
+
+    window.th_video = function (id, live) {
+      id = normalizeId(id);
+      startTime = timestamp();
+      seekToEnd = !!live;
+
+      if (player !== null) {
+        queuedVideo = id;
+        return;
+      }
+
+      debug("create: " + id);
+      player = new YT.Player("player", {
+        width: "100%",
+        height: "100%",
+        videoId: id,
+        host: "https://www.youtube-nocookie.com",
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
+          iv_load_policy: 3
+        },
+        events: {
+          onReady: function () {
+            playerReady = true;
+            debug("ready: " + id);
+          },
+          onError: function (event) {
+            debug("youtube error: " + event.data);
+          }
+        }
+      });
+    };
+
+    window.th_volume = function (volume) {
+      queuedVolume = Math.max(0, Math.min(100, Number(volume)));
+      debug("volume: " + queuedVolume);
+    };
+
+    window.th_seek = function (seconds) {
+      startTime = timestamp() - Number(seconds);
+      debug("seek: " + seconds);
+    };
+
+    var params = new URLSearchParams(location.search);
+    var testId = params.get("v");
+    if (testId) {
+      window.th_video(testId, false);
+    }
+  </script>
+</body>
+</html>
