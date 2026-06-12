@@ -2,9 +2,9 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>CinemaMod YouTube Redirect</title>
+  <title>CinemaMod YouTube</title>
   <style>
-    html, body {
+    html, body, #player {
       margin: 0;
       width: 100%;
       height: 100%;
@@ -12,22 +12,23 @@
       overflow: hidden;
     }
 
-    #status {
-      position: fixed;
-      left: 8px;
-      top: 8px;
-      z-index: 999999;
-      color: white;
-      background: red;
-      font: 18px Arial, sans-serif;
-      padding: 8px 12px;
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
     }
   </style>
 </head>
 <body>
-  <div id="status">page loaded</div>
+  <div id="player"></div>
 
   <script>
+    var player = null;
+    var ready = false;
+    var pendingVideo = null;
+    var lastVolume = 100;
+
     function normalizeId(id) {
       id = String(id || "");
 
@@ -43,40 +44,88 @@
       return id;
     }
 
-    function play(id) {
-      id = normalizeId(id);
+    window.onYouTubeIframeAPIReady = function () {
+      player = new YT.Player("player", {
+        width: "100%",
+        height: "100%",
+        videoId: "",
+        playerVars: {
+          autoplay: 1,
+          mute: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          rel: 0,
+          enablejsapi: 1,
+          origin: location.origin
+        },
+        events: {
+          onReady: function () {
+            ready = true;
+            player.mute();
 
-      document.getElementById("status").textContent = "redirect: " + id;
+            if (pendingVideo) {
+              th_video(pendingVideo.id, pendingVideo.isLivestream);
+              pendingVideo = null;
+            }
 
-      var url =
-        "https://yewtu.be/embed/" + encodeURIComponent(id) +
-        "?autoplay=1" +
-        "&mute=1" +
-        "&controls=0" +
-        "&playsinline=1" +
-        "&rel=0" +
-        "&fs=0" +
-        "&modestbranding=1";
+            var testId = new URLSearchParams(location.search).get("v");
+            if (testId) {
+              th_video(testId, false);
+            }
+          },
 
-      setTimeout(function () {
-        window.location.replace(url);
-      }, 300);
-    }
-
-    window.th_video = function (id, isLivestream) {
-      play(id);
+          onStateChange: function (event) {
+            if (event.data === YT.PlayerState.PLAYING) {
+              player.setVolume(lastVolume);
+            }
+          }
+        }
+      });
     };
 
-    window.th_volume = function (volume) {};
+    window.th_video = function (id, isLivestream) {
+      id = normalizeId(id);
 
-    window.th_seek = function (seconds) {};
+      if (!ready || !player || !player.loadVideoById) {
+        pendingVideo = { id: id, isLivestream: isLivestream };
+        return;
+      }
 
-    var params = new URLSearchParams(location.search);
-    var testId = params.get("v");
+      player.mute();
 
-    if (testId) {
-      play(testId);
-    }
+      player.loadVideoById({
+        videoId: id,
+        startSeconds: 0
+      });
+
+      setTimeout(function () {
+        player.playVideo();
+      }, 300);
+    };
+
+    window.th_volume = function (volume) {
+      lastVolume = Math.max(0, Math.min(100, Number(volume)));
+
+      if (!player || !player.setVolume) return;
+
+      player.setVolume(lastVolume);
+
+      if (lastVolume <= 0) {
+        player.mute();
+      }
+    };
+
+    window.th_seek = function (seconds) {
+      if (!player || !player.seekTo) return;
+      player.seekTo(Number(seconds), true);
+    };
+
+    var tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
   </script>
 </body>
 </html>
