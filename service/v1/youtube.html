@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <title>CinemaMod YouTube</title>
   <style>
-    html, body, #player {
+    html, body {
       margin: 0;
       width: 100%;
       height: 100%;
@@ -12,22 +12,31 @@
       overflow: hidden;
     }
 
-    iframe {
-      width: 100%;
-      height: 100%;
-      border: 0;
-      display: block;
+    #status {
+      position: fixed;
+      left: 8px;
+      top: 8px;
+      z-index: 999999;
+      color: #fff;
+      background: rgba(0, 0, 0, .75);
+      font: 16px Arial, sans-serif;
+      padding: 6px 10px;
+      display: none;
     }
   </style>
 </head>
 <body>
-  <div id="player"></div>
+  <div id="status">loaded</div>
 
   <script>
-    var player = null;
-    var ready = false;
-    var pendingVideo = null;
-    var lastVolume = 100;
+    function debug(text) {
+      var params = new URLSearchParams(location.search);
+      if (params.get("debug") === "1") {
+        var status = document.getElementById("status");
+        status.style.display = "block";
+        status.textContent = text;
+      }
+    }
 
     function normalizeId(id) {
       id = String(id || "");
@@ -44,88 +53,37 @@
       return id;
     }
 
-    window.onYouTubeIframeAPIReady = function () {
-      player = new YT.Player("player", {
-        width: "100%",
-        height: "100%",
-        videoId: "",
-        playerVars: {
-          autoplay: 1,
-          mute: 1,
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
-          modestbranding: 1,
-          playsinline: 1,
-          rel: 0,
-          enablejsapi: 1,
-          origin: location.origin
-        },
-        events: {
-          onReady: function () {
-            ready = true;
-            player.mute();
-
-            if (pendingVideo) {
-              th_video(pendingVideo.id, pendingVideo.isLivestream);
-              pendingVideo = null;
-            }
-
-            var testId = new URLSearchParams(location.search).get("v");
-            if (testId) {
-              th_video(testId, false);
-            }
-          },
-
-          onStateChange: function (event) {
-            if (event.data === YT.PlayerState.PLAYING) {
-              player.setVolume(lastVolume);
-            }
-          }
-        }
-      });
-    };
-
-    window.th_video = function (id, isLivestream) {
+    function play(id) {
       id = normalizeId(id);
+      debug("redirect: " + id);
 
-      if (!ready || !player || !player.loadVideoById) {
-        pendingVideo = { id: id, isLivestream: isLivestream };
-        return;
-      }
-
-      player.mute();
-
-      player.loadVideoById({
-        videoId: id,
-        startSeconds: 0
-      });
+      var url =
+        "https://www.youtube.com/embed/" + encodeURIComponent(id) +
+        "?autoplay=1" +
+        "&mute=1" +
+        "&controls=0" +
+        "&playsinline=1" +
+        "&rel=0" +
+        "&fs=0" +
+        "&modestbranding=1";
 
       setTimeout(function () {
-        player.playVideo();
+        window.location.replace(url);
       }, 300);
+    }
+
+    window.th_video = function (id, isLivestream) {
+      play(id);
     };
 
-    window.th_volume = function (volume) {
-      lastVolume = Math.max(0, Math.min(100, Number(volume)));
+    window.th_volume = function (volume) {};
+    window.th_seek = function (seconds) {};
 
-      if (!player || !player.setVolume) return;
-
-      player.setVolume(lastVolume);
-
-      if (lastVolume <= 0) {
-        player.mute();
-      }
-    };
-
-    window.th_seek = function (seconds) {
-      if (!player || !player.seekTo) return;
-      player.seekTo(Number(seconds), true);
-    };
-
-    var tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(tag);
+    var params = new URLSearchParams(location.search);
+    var testId = params.get("v");
+    if (testId) {
+      play(testId);
+    }
   </script>
 </body>
 </html>
