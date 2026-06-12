@@ -46,6 +46,7 @@
     var start_time = 0;
     var seek_to_end = false;
     var api_ready = false;
+    var last_seek_time = 0;
 
     function debug(text) {
       var params = new URLSearchParams(location.search);
@@ -99,7 +100,11 @@
 
         if (target_t < (player.getDuration() - 1.0)) {
           if (Math.abs(player.getCurrentTime() - target_t) > 2.0) {
-            player.seekTo(target_t, true);
+            var now = timestamp();
+            if (now - last_seek_time > 0.5) {
+              player.seekTo(target_t, true);
+              last_seek_time = now;
+            }
           }
         }
 
