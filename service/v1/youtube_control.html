@@ -43,8 +43,6 @@
     var queuedVolume = 100;
     var startTime = 0;
     var seekToEnd = false;
-    var lastPlayRequest = 0;
-    var lastSeekRequest = 0;
 
     function debug(text) {
       var params = new URLSearchParams(location.search);
@@ -99,33 +97,17 @@
       if (player.getDuration && player.getCurrentTime && player.seekTo) {
         var target = targetTime();
         var duration = player.getDuration();
-        var now = timestamp();
 
-        if (duration > 0 && target < duration - 1.0 && now - lastSeekRequest > 1.0) {
+        if (duration > 0 && target < duration - 1.0) {
           if (Math.abs(player.getCurrentTime() - target) > 2.0) {
             player.seekTo(target, true);
-            lastSeekRequest = now;
           }
         }
       }
 
-      if (player.getPlayerState && player.playVideo && shouldRequestPlay()) {
+      if (player.getPlayerState && player.playVideo && player.getPlayerState() !== 1) {
         player.playVideo();
-        lastPlayRequest = timestamp();
       }
-    }
-
-    function shouldRequestPlay() {
-      var state = player.getPlayerState();
-      var now = timestamp();
-
-      if (now - lastPlayRequest < 1.0) return false;
-
-      // Avoid fighting YouTube's buffering/ad transitions. Repeated playVideo()
-      // calls during those transitions can make the embedded surface flicker.
-      if (state === 1 || state === 3) return false;
-
-      return true;
     }
 
     setInterval(tick, 100);
