@@ -55,24 +55,26 @@
             player.mute();
 
             if (pending) {
-              th_video(pending.id, pending.autoplay);
+              th_video(pending.id, pending.isLivestream);
               pending = null;
             }
 
             const params = new URLSearchParams(location.search);
             const testId = params.get("v");
             if (testId) {
-              th_video(testId, true);
+              th_video(testId, false);
             }
           },
-         onStateChange: function (event) {
-  if (event.data === YT.PlayerState.PLAYING && lastVolume > 0) {
-    setTimeout(function () {
-      player.setVolume(lastVolume);
-      player.unMute();
-    }, 800);
-  }
-}
+
+          onStateChange: function (event) {
+            if (event.data === YT.PlayerState.PLAYING && lastVolume > 0) {
+              setTimeout(function () {
+                player.setVolume(lastVolume);
+                player.unMute();
+              }, 800);
+            }
+          }
+        }
       });
     }
 
@@ -92,44 +94,14 @@
     }
 
     function th_video(id, isLivestream) {
-  id = normalizeId(id);
+      id = normalizeId(id);
 
-  if (!ready || !player || !player.loadVideoById) {
-    pending = { id: id, autoplay: true };
-    return;
-  }
-
-  player.mute();
-
-  player.loadVideoById({
-    videoId: id,
-    startSeconds: 0
-  });
-
-  setTimeout(function () {
-    player.playVideo();
-  }, 100);
-}
-    }
-
-    function th_volume(volume) {
-      lastVolume = Math.max(0, Math.min(100, Number(volume)));
-
-      if (!player || !player.setVolume) return;
-
-      player.setVolume(lastVolume);
-
-      if (lastVolume <= 0) {
-        player.mute();
-      } else {
-        player.unMute();
+      if (!ready || !player || !player.loadVideoById) {
+        pending = { id: id, isLivestream: isLivestream };
+        return;
       }
-    }
 
-    function th_seek(seconds) {
-      if (!player || !player.seekTo) return;
-      player.seekTo(Number(seconds), true);
-    }
-  </script>
-</body>
-</html>
+      player.mute();
+
+      player.loadVideoById({
+        video
