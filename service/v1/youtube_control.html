@@ -1,213 +1,99 @@
-<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <title>CinemaMod YouTube</title>
-  <style>
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      overflow: hidden;
-    }
 
-    #player {
-      width: 200%;
-      height: 100%;
-      position: absolute;
-      left: -50%;
-    }
+<body style="margin:0px;background-color:black;overflow:hidden;">
+	<div id="player" style="width:200%;height:100%;position:absolute;left:-50%;"></div>
+	<script src="https://www.youtube.com/iframe_api" type="text/javascript"></script>
+	<script>
 
-    #status {
-      position: fixed;
-      left: 8px;
-      top: 8px;
-      z-index: 999999;
-      color: #fff;
-      background: rgba(0, 0, 0, .75);
-      font: 16px Arial, sans-serif;
-      padding: 6px 10px;
-      display: none;
-    }
-  </style>
-</head>
-<body>
-  <div id="player"></div>
-  <div id="status">loading</div>
+		function timestamp() {
+			return (new Date().getTime()) * 0.001;
+		}
 
-  <script>
-    var player = null;
-    var player_ready = false;
-    var to_video = null;
-    var pending_video = null;
-    var pending_live = false;
-    var to_volume = 100;
-    var start_time = 0;
-    var seek_to_end = false;
-    var api_ready = false;
-    var last_seek_time = 0;
+		function target_time() {
+			return Math.max(0, (timestamp() - start_time) - 0.5);
+		}
 
-    function debug(text) {
-      var params = new URLSearchParams(location.search);
-      if (params.get("debug") === "1") {
-        var status = document.getElementById("status");
-        status.style.display = "block";
-        status.textContent = text;
-      }
-    }
+		var player = null;
+		var player_ready = false;
+		var to_video = null;
+		var to_volume = 100;
+		var start_time = 0;
+		var seek_to_end = false;
 
-    function normalize_id(id) {
-      id = String(id || "");
+		function think() {
+			if (player_ready) {
 
-      var watch = id.match(/[?&]v=([^&]+)/);
-      if (watch) return watch[1];
+				if (to_video !== null) {
+					player.loadVideoById(to_video);
+					to_video = null;
+				}
 
-      var short = id.match(/youtu\.be\/([^?&]+)/);
-      if (short) return short[1];
+				if (to_volume !== null) {
+					player.setVolume(to_volume);
+					to_volume = null;
+				}
 
-      var embed = id.match(/embed\/([^?&]+)/);
-      if (embed) return embed[1];
+				if (seek_to_end && player.getDuration() > 0) {
+					start_time = timestamp() - player.getDuration();
+					seek_to_end = false;
+				}
 
-      return id;
-    }
+				var target_t = target_time();
 
-    function timestamp() {
-      return (new Date().getTime()) * 0.001;
-    }
+				if (target_t < (player.getDuration() - 1.0)) {
+					if (Math.abs(player.getCurrentTime() - target_t) > 2.0) {
+						player.seekTo(target_t, true);
+					}
+				}
 
-    function target_time() {
-      return Math.max(0, (timestamp() - start_time) - 0.5);
-    }
 
-    function think() {
-      if (player_ready) {
-        if (to_video !== null) {
-          player.loadVideoById(to_video);
-          to_video = null;
-        }
+				if (player.getPlayerState() != 1) {
+					player.playVideo();
+				}
+			}
 
-        if (to_volume !== null) {
-          player.setVolume(to_volume);
-        }
 
-        if (seek_to_end && player.getDuration() > 0) {
-          start_time = timestamp() - player.getDuration();
-          seek_to_end = false;
-        }
+		}
+		setInterval(think, 100);
 
-        var target_t = target_time();
+		function th_video(id, live = false) {
+			start_time = timestamp();
+			seek_to_end = live;
+			if (player !== null) {
+				to_video = id;
+			} else {
+				player = new YT.Player('player', {
+					height: '100%',
+					width: '100%',
+					videoId: id,
+					host: 'https://www.youtube-nocookie.com',
+					playerVars: {
+						autoplay: 1,
+						controls: 0,
+						showinfo: 0,
+						modestbranding: 1,
+						rel: 0,
+						iv_load_policy: 3
+					},
+					events: {
+						onReady: onReady,
+					}
+				});
+			}
+		};
 
-        if (target_t < (player.getDuration() - 1.0)) {
-          if (Math.abs(player.getCurrentTime() - target_t) > 2.0) {
-            var now = timestamp();
-            if (now - last_seek_time > 0.5) {
-              player.seekTo(target_t, true);
-              last_seek_time = now;
-            }
-          }
-        }
+		function th_volume(volume) {
+			to_volume = volume;
+		};
 
-        if (player.getPlayerState() != 1) {
-          player.playVideo();
-        }
+		function th_seek(seconds) {
+			start_time = timestamp() - seconds;
+		};
 
-        if (player.getVideoData) {
-          var data = player.getVideoData();
-          if (data && data.video_id) {
-            debug("playing: " + data.video_id + " state=" + player.getPlayerState());
-          }
-        }
-      }
-    }
-
-    setInterval(think, 100);
-
-    window.onYouTubeIframeAPIReady = function () {
-      api_ready = true;
-      debug("api ready");
-
-      if (pending_video !== null) {
-        th_video(pending_video, pending_live);
-        pending_video = null;
-      }
-    };
-
-    function create_player(id) {
-      debug("create: " + id);
-      player = new YT.Player("player", {
-        height: "100%",
-        width: "100%",
-        videoId: id,
-        host: "https://www.youtube-nocookie.com",
-        playerVars: {
-          autoplay: 1,
-          controls: 0,
-          showinfo: 0,
-          modestbranding: 1,
-          rel: 0,
-          iv_load_policy: 3
-        },
-        events: {
-          onReady: onReady,
-          onError: function (event) {
-            debug("youtube error: " + event.data);
-          }
-        }
-      });
-    }
-
-    function th_video(id, live) {
-      id = normalize_id(id);
-      start_time = timestamp();
-      seek_to_end = !!live;
-
-      if (!api_ready || !window.YT || !YT.Player) {
-        pending_video = id;
-        pending_live = !!live;
-        debug("waiting api: " + id);
-        return;
-      }
-
-      if (player !== null) {
-        to_video = id;
-      } else {
-        create_player(id);
-      }
-    }
-
-    function th_volume(volume) {
-      to_volume = Math.max(0, Math.min(100, Number(volume)));
-      debug("volume: " + to_volume);
-    }
-
-    function th_seek(seconds) {
-      start_time = timestamp() - Number(seconds);
-      debug("seek: " + seconds);
-    }
-
-    function onReady() {
-      player_ready = true;
-      debug("ready");
-    }
-
-    window.th_video = th_video;
-    window.th_volume = th_volume;
-    window.th_seek = th_seek;
-
-    var params = new URLSearchParams(location.search);
-    var testId = params.get("v");
-    if (testId) {
-      th_video(testId, false);
-    }
-
-    var tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    tag.type = "text/javascript";
-    tag.onerror = function () {
-      debug("api failed");
-    };
-    document.head.appendChild(tag);
-  </script>
+		function onReady(playerId) {
+			player_ready = true;
+		}
+	</script>
 </body>
+
 </html>
