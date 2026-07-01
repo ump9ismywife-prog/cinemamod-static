@@ -23,8 +23,6 @@
 		var start_time = 0;
 		var seek_to_end = false;
 		var has_started = false;
-		var current_video = null;
-		var force_autoplay_until = 0;
 
 		function onYouTubeIframeAPIReady() {
 			api_ready = true;
@@ -48,15 +46,10 @@
 			}
 		}
 
-		function force_autoplay() {
-			if (!player || !player.playVideo || !player.mute) return;
-
+		function start_muted_playback() {
+			if (!player || !player.mute || !player.playVideo) return;
 			player.mute();
 			player.playVideo();
-		}
-
-		function mark_autoplay_window() {
-			force_autoplay_until = timestamp() + 10.0;
 		}
 
 		function think() {
@@ -64,11 +57,10 @@
 
 				if (to_video !== null) {
 					has_started = false;
-					current_video = to_video;
-					mark_autoplay_window();
 					player.mute();
 					player.loadVideoById(to_video);
 					to_video = null;
+					setTimeout(start_muted_playback, 100);
 				}
 
 				apply_volume();
@@ -87,11 +79,7 @@
 				}
 
 				if (player.getPlayerState() != 1) {
-					player.playVideo();
-				}
-
-				if (!has_started && timestamp() < force_autoplay_until) {
-					force_autoplay();
+					start_muted_playback();
 				}
 			}
 		}
@@ -100,9 +88,7 @@
 		function th_video(id, live = false) {
 			start_time = timestamp();
 			seek_to_end = live;
-			current_video = id;
 			has_started = false;
-			mark_autoplay_window();
 
 			if (!api_ready || !window.YT || !YT.Player) {
 				pending_video = id;
@@ -128,7 +114,9 @@
 						iv_load_policy: 3,
 						playsinline: 1,
 						enablejsapi: 1,
-						origin: location.origin
+						origin: location.origin,
+						loop: 1,
+						playlist: id
 					},
 					events: {
 						onReady: onReady,
@@ -149,21 +137,14 @@
 
 		function onReady(playerId) {
 			player_ready = true;
-			if (player.getIframe) {
-				player.getIframe().setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
-			}
-			player.mute();
-			force_autoplay();
-			setTimeout(force_autoplay, 250);
-			setTimeout(force_autoplay, 750);
+			start_muted_playback();
 		}
 
 		function onStateChange(event) {
 			if (event.data === YT.PlayerState.PLAYING) {
 				has_started = true;
-				force_autoplay_until = 0;
-				setTimeout(apply_volume, 500);
-				setTimeout(apply_volume, 1200);
+				setTimeout(apply_volume, 300);
+				setTimeout(apply_volume, 900);
 			}
 		}
 	</script>
