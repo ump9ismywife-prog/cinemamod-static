@@ -35,10 +35,7 @@ function is_ad_playing() {
 }
 
 function skip_ad() {
-    // Mirrors the "timeWarp" trick from the reference article: force the
-    // currently loaded media (the ad) to its end so playback moves past it.
-    // We can't reach into the iframe's DOM (cross-origin), so we do this
-    // through the IFrame Player API instead of querySelector + currentTime.
+    // Try a plain seek first (works when the ad allows seeking).
     var dur = player.getDuration();
     if (dur > 0) {
         player.seekTo(dur, true);
@@ -46,6 +43,9 @@ function skip_ad() {
     if (player.getPlayerState() != 1) {
         player.playVideo();
     }
+    // Also force-load the real video directly, which discards whatever is
+    // currently playing regardless of whether seeking is locked.
+    player.loadVideoById(current_id);
 }
 
 function think() {
@@ -66,7 +66,7 @@ function think() {
     // --- Ad detection / skip ---
     var ad_now = is_ad_playing();
     if (ad_now && !ad_showing) {
-        // Ad just started: mute it and immediately push it toward its end.
+        // Ad just started: mute it.
         ad_showing = true;
         player.setVolume(0);
     } else if (!ad_now && ad_showing) {
