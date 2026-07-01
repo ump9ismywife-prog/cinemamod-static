@@ -23,6 +23,8 @@
 		var start_time = 0;
 		var seek_to_end = false;
 		var has_started = false;
+		var current_video = null;
+		var force_autoplay_until = 0;
 
 		function onYouTubeIframeAPIReady() {
 			api_ready = true;
@@ -46,11 +48,24 @@
 			}
 		}
 
+		function force_autoplay() {
+			if (!player || !player.playVideo || !player.mute) return;
+
+			player.mute();
+			player.playVideo();
+		}
+
+		function mark_autoplay_window() {
+			force_autoplay_until = timestamp() + 10.0;
+		}
+
 		function think() {
 			if (player_ready) {
 
 				if (to_video !== null) {
 					has_started = false;
+					current_video = to_video;
+					mark_autoplay_window();
 					player.mute();
 					player.loadVideoById(to_video);
 					to_video = null;
@@ -74,6 +89,10 @@
 				if (player.getPlayerState() != 1) {
 					player.playVideo();
 				}
+
+				if (!has_started && timestamp() < force_autoplay_until) {
+					force_autoplay();
+				}
 			}
 		}
 		setInterval(think, 100);
@@ -81,6 +100,9 @@
 		function th_video(id, live = false) {
 			start_time = timestamp();
 			seek_to_end = live;
+			current_video = id;
+			has_started = false;
+			mark_autoplay_window();
 
 			if (!api_ready || !window.YT || !YT.Player) {
 				pending_video = id;
@@ -127,14 +149,21 @@
 
 		function onReady(playerId) {
 			player_ready = true;
+			if (player.getIframe) {
+				player.getIframe().setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
+			}
 			player.mute();
-			player.playVideo();
+			force_autoplay();
+			setTimeout(force_autoplay, 250);
+			setTimeout(force_autoplay, 750);
 		}
 
 		function onStateChange(event) {
 			if (event.data === YT.PlayerState.PLAYING) {
 				has_started = true;
-				setTimeout(apply_volume, 800);
+				force_autoplay_until = 0;
+				setTimeout(apply_volume, 500);
+				setTimeout(apply_volume, 1200);
 			}
 		}
 	</script>
