@@ -15,23 +15,48 @@
 
 		var player = null;
 		var player_ready = false;
+		var api_ready = false;
 		var to_video = null;
+		var pending_video = null;
+		var pending_live = false;
 		var to_volume = 100;
 		var start_time = 0;
 		var seek_to_end = false;
+		var has_started = false;
+
+		function onYouTubeIframeAPIReady() {
+			api_ready = true;
+
+			if (pending_video !== null) {
+				th_video(pending_video, pending_live);
+				pending_video = null;
+			}
+		}
+
+		function apply_volume() {
+			if (!player || !player.setVolume) return;
+
+			var volume = Math.max(0, Math.min(100, Number(to_volume)));
+			player.setVolume(volume);
+
+			if (volume <= 0) {
+				player.mute();
+			} else if (has_started) {
+				player.unMute();
+			}
+		}
 
 		function think() {
 			if (player_ready) {
 
 				if (to_video !== null) {
+					has_started = false;
+					player.mute();
 					player.loadVideoById(to_video);
 					to_video = null;
 				}
 
-				if (to_volume !== null) {
-					player.setVolume(to_volume);
-					to_volume = null;
-				}
+				apply_volume();
 
 				if (seek_to_end && player.getDuration() > 0) {
 					start_time = timestamp() - player.getDuration();
@@ -46,19 +71,23 @@
 					}
 				}
 
-
 				if (player.getPlayerState() != 1) {
 					player.playVideo();
 				}
 			}
-
-
 		}
 		setInterval(think, 100);
 
 		function th_video(id, live = false) {
 			start_time = timestamp();
 			seek_to_end = live;
+
+			if (!api_ready || !window.YT || !YT.Player) {
+				pending_video = id;
+				pending_live = live;
+				return;
+			}
+
 			if (player !== null) {
 				to_video = id;
 			} else {
@@ -69,14 +98,19 @@
 					host: 'https://www.youtube-nocookie.com/embed/',
 					playerVars: {
 						autoplay: 1,
+						mute: 1,
 						controls: 0,
 						showinfo: 0,
 						modestbranding: 1,
 						rel: 0,
-						iv_load_policy: 3
+						iv_load_policy: 3,
+						playsinline: 1,
+						enablejsapi: 1,
+						origin: location.origin
 					},
 					events: {
 						onReady: onReady,
+						onStateChange: onStateChange
 					}
 				});
 			}
@@ -84,6 +118,7 @@
 
 		function th_volume(volume) {
 			to_volume = volume;
+			apply_volume();
 		};
 
 		function th_seek(seconds) {
@@ -92,6 +127,15 @@
 
 		function onReady(playerId) {
 			player_ready = true;
+			player.mute();
+			player.playVideo();
+		}
+
+		function onStateChange(event) {
+			if (event.data === YT.PlayerState.PLAYING) {
+				has_started = true;
+				setTimeout(apply_volume, 800);
+			}
 		}
 	</script>
 </body>
